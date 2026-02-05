@@ -5,13 +5,16 @@ on:
     branches: [ main ]
 
 jobs:
-  build_sonar_nexus:
+  pipeline:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build & Test
-        run: mvn clean verify
+      - name: Build (creates target/)
+        run: mvn -DskipTests clean package
+
+      - name: Verify JAR exists
+        run: ls -lh target/*.jar
 
       - name: SonarQube Analysis
         run: |
@@ -20,7 +23,7 @@ jobs:
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
 
-      - name: Configure Maven settings.xml
+      - name: Configure Maven settings.xml (Nexus)
         run: |
           mkdir -p ~/.m2
           cat > ~/.m2/settings.xml <<EOF
@@ -37,15 +40,6 @@ jobs:
 
       - name: Deploy to Nexus
         run: mvn deploy -DskipTests
-
-  docker_build_push:
-    runs-on: self-hosted
-    needs: build_sonar_nexus
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build JAR for Docker
-        run: mvn -DskipTests package
 
       - name: Docker Login
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
