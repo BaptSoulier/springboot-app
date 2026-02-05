@@ -7,15 +7,19 @@ on:
 jobs:
   pipeline:
     runs-on: self-hosted
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Build (creates target/)
-        run: mvn -DskipTests clean package
+      # 1) Build + génère un JAR
+      - name: Build (creates app.jar)
+        run: |
+          mvn -DskipTests clean package
+          cp target/*.jar app.jar
+          ls -lh app.jar
 
-      - name: Verify JAR exists
-        run: ls -lh target/*.jar
-
+      # 2) Analyse SonarQube
       - name: SonarQube Analysis
         run: |
           mvn sonar:sonar \
@@ -23,6 +27,7 @@ jobs:
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
 
+      # 3) Settings Maven (auth Nexus)
       - name: Configure Maven settings.xml (Nexus)
         run: |
           mkdir -p ~/.m2
@@ -38,14 +43,16 @@ jobs:
           </settings>
           EOF
 
+      # 4) Déploiement vers Nexus
       - name: Deploy to Nexus
         run: mvn deploy -DskipTests
 
+      # 5) Login Docker Hub
       - name: Docker Login
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
+      # 6) Build + push image Docker
       - name: Build & Push Docker Image
         run: |
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/springboot-app:latest .
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/springboot-app:latest
-
